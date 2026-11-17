@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+# nunca subir imagenes de tarjetas ni fotos
+*.img
+*.npz
+*.npy
+*.ARW
+*.arw
+*.NEF
+*.nef
+*.CR2
+*.cr2
+*.jpg
+*.JPG
