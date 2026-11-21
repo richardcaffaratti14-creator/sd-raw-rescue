@@ -96,6 +96,36 @@ class Source:
             buf = self._slow(a, e - a)
         return buf[off - a: off - a + n]
 
+    def length(self):
+        """Bytes del dispositivo, volumen o archivo; None si no se pueden averiguar."""
+        try:
+            n = _ioctl_length(self.f) if self.path.startswith('\\\\.\\') else None
+            if n:
+                return n
+            end = self.f.seek(0, 2)
+            self.f.seek(0)
+            return end or None
+        except Exception:
+            return None
+
+
+def _ioctl_length(f):
+    """Largo de un volumen o disco de Windows (IOCTL_DISK_GET_LENGTH_INFO). None si no aplica o falla."""
+    if os.name != 'nt':
+        return None
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    k32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                                    wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    k32.DeviceIoControl.restype = wintypes.BOOL
+    out = ctypes.c_longlong(0)
+    got = wintypes.DWORD(0)
+    ok = k32.DeviceIoControl(wintypes.HANDLE(msvcrt.get_osfhandle(f.fileno())), 0x0007405C, None, 0,
+                             ctypes.byref(out), 8, ctypes.byref(got), None)
+    return out.value if ok and out.value > 0 else None
+
 
 # ---------------------------------------------------------------- FAT32
 
@@ -261,17 +291,18 @@ def exfat_geometry(src):
     if not (9 <= bps_shift <= 12) or spc_shift > 25 or not ncl:
         return None
     bps = 1 << bps_shift
-    return dict(base=base, data_off=heap_off * bps, csize=bps << spc_shift, ncl=ncl)
+    vol = struct.unpack_from('<Q', b, 72)[0] * bps                # VolumeLength (bytes)
+    return dict(base=base, data_off=heap_off * bps, csize=bps << spc_shift, ncl=ncl, vol=vol)
 
 
 class Plano(Fat32):
     """Volumen sin FAT32 legible (exFAT): solo geometria de clusters, sin FAT ni directorio. Sirve para mapear y carvar."""
 
-    def __init__(self, src, base, data_off, csize, ncl):
+    def __init__(self, src, base, data_off, csize, ncl, vol=0):
         self.src, self.base, self.data_off, self.csize, self.ncl = src, base, data_off, csize, ncl
         self.bps, self.spc = SEC, csize // SEC
         self.lim = ncl + 2
-        self.tot = (data_off + ncl * csize) // SEC
+        self.tot = max(data_off + ncl * csize, vol) // SEC
         self.fat = None
 
 
@@ -714,16 +745,37 @@ def cmd_extract(fs, a):
     say('  reporte:  %s' % os.path.join(a.out, 'reporte.csv'))
 
 
-def cmd_image(fs, a):
-    total = fs.tot * SEC
-    say('== IMAGEN == %s -> %s (%s)' % (fs.src.path, a.out, human(total)))
+def tamano_segun_boot(src):
+    """Bytes que declara el boot sector (FAT32 o exFAT), o None. Solo informativo: el que manda es el largo del dispositivo."""
+    try:
+        return Fat32(src, 1).tot * SEC
+    except SystemExit:
+        pass
+    except Exception:
+        return None
+    g = exfat_geometry(src)
+    return max(g['vol'], g['data_off'] + g['ncl'] * g['csize']) if g else None
+
+
+def cmd_image(src, a):
+    """Copia 1:1 del origen (volumen, disco o archivo). No necesita entender el sistema de archivos: sirve con
+    FAT32, exFAT o un boot sector roto."""
+    real = src.length()
+    boot = tamano_segun_boot(src)
+    total = a.size or real or boot
+    if not total:
+        raise SystemExit('No pude saber el tamano de %s: pasar --size BYTES.' % src.path)
+    say('== IMAGEN == %s -> %s (%s)' % (src.path, a.out, human(total)))
+    say('  largo del dispositivo: %s | segun boot sector: %s | --size: %s' % (real, boot, a.size or '-'))
+    if real and a.size and real != a.size:
+        say('  OJO: --size (%d) no coincide con el largo del dispositivo (%d)' % (a.size, real))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     h = hashlib.sha256()
     t0 = time.time()
     done, nxt = 0, 0
     with open(a.out, 'wb') as f:
         while done < total:
-            b = fs.rd(done, min(4 << 20, total - done))
+            b = src.read(done, min(4 << 20, total - done))
             f.write(b)
             h.update(b)
             done += len(b)
@@ -732,7 +784,7 @@ def cmd_image(fs, a):
                 say('  %6.0f MB de %.0f MB  (%.0f MB/s, faltan ~%.0f s)' % (
                     done / 1e6, total / 1e6, done / 1e6 / el, (total - done) / (done / el)))
                 nxt += 256 << 20
-    say('  LISTO: %s  sha256=%s  sectores_ilegibles=%d  %.0fs' % (human(done), h.hexdigest(), fs.src.bad_sectors,
+    say('  LISTO: %s  sha256=%s  sectores_ilegibles=%d  %.0fs' % (human(done), h.hexdigest(), src.bad_sectors,
                                                                   time.time() - t0))
 
 
@@ -778,6 +830,7 @@ def main():
             s.add_argument('--limit', type=int, default=0)
         else:
             s.add_argument('--out', default='tarjeta.img')
+            s.add_argument('--size', type=int, default=0, help='bytes a copiar si no se puede averiguar el largo')
     t = sp.add_parser('thumbs')
     t.add_argument('paths', nargs='+')
     t.add_argument('--out', default='THUMBS')
@@ -794,8 +847,11 @@ def main():
             cmd_thumbs(a)
         else:
             src = Source(a.src)
-            fs = Fat32(src, a.fat)
-            {'scan': cmd_scan, 'extract': cmd_extract, 'image': cmd_image}[a.cmd](fs, a)
+            if a.cmd == 'image':
+                cmd_image(src, a)
+            else:
+                fs = Fat32(src, a.fat)
+                {'scan': cmd_scan, 'extract': cmd_extract}[a.cmd](fs, a)
             if src.bad_sectors:
                 say('!! sectores ilegibles: %d (rellenados con ceros)' % src.bad_sectors)
     except SystemExit as ex:
