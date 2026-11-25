@@ -23,5 +23,6 @@ Después, en Claude Code, basta con contar el problema ("se rompieron las fotos 
 
 - Probado con una tarjeta FAT32 de 32 GB con fotos ARW de una Sony A7R V y NEF de una Nikon D7200. La síntesis de filas es solo para ARW2 y tiene las constantes de la A7R V; para otro modelo hay que ajustarlas (ver `references/arw2-sony.md`).
 - FAT32 completo. exFAT (tarjetas de 64 GB o más): la imagen funciona con cualquier sistema de archivos y `exfat_jpg.py` recupera JPG por entradas de directorio (también las borradas), cadena FAT y cabeceras (probado con una Canon EOS 70D: 1389 JPG); `carve_cabeceras.py` y `mapa_clusters.py` en exFAT solo se probaron con una imagen sintética.
+- Discos externos NTFS formateados (formato rápido): `ntfs_formateado.py` recupera archivos con nombre y carpeta desde el índice anterior (probado con un disco USB de 1 TB: 30 811 archivos). Ver `references/ntfs-formateado.md`.
 - Las filas rehechas tienen calidad JPEG, no de RAW: la skill obliga a rotularlas.
 - Trabajar siempre sobre una imagen de la tarjeta. Sin garantía: las herramientas se hicieron para un caso real y no reemplazan un servicio profesional de recuperación si la tarjeta tiene daño físico.

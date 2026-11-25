@@ -1,6 +1,6 @@
 ---
 name: sd-raw-rescue
-description: Rescata fotos RAW (Sony ARW/SR2, Nikon NEF, Canon CR2, DNG) y JPG de tarjetas SD/CF dañadas, borradas, formateadas o con el directorio roto, siempre en SOLO LECTURA y sobre una imagen 1:1 de la tarjeta. Rearma lo que PhotoRec/TestDisk dejan roto (bandas magenta, RAW que se ve bien en miniatura y se rompe al abrirlo, nombres con basura en DCIM, archivos de 0 bytes) usando la FAT y los volcados de directorio que quedan en la tarjeta, saca fotos borradas por cabecera TIFF y repara filas faltantes de un ARW con el JPEG embebido. Usar SIEMPRE que el usuario quiera recuperar fotos o archivos de una memoria o tarjeta SD/CF de cámara, mencione PhotoRec, TestDisk, Recuva, "la tarjeta pide formatear", fotos borradas o rotas de un evento, RAW/ARW/NEF/CR2 que no abren, aunque no pida nada forense. SD card photo recovery, corrupted or deleted RAW/JPG, FAT32, exFAT.
+description: Rescata fotos RAW (Sony ARW/SR2, Nikon NEF, Canon CR2, DNG) y JPG de tarjetas SD/CF dañadas, borradas, formateadas o con el directorio roto, siempre en SOLO LECTURA y sobre una imagen 1:1 de la tarjeta. Rearma lo que PhotoRec/TestDisk dejan roto (bandas magenta, RAW que se ve bien en miniatura y se rompe al abrirlo, nombres con basura en DCIM, archivos de 0 bytes) usando la FAT y los volcados de directorio que quedan en la tarjeta, saca fotos borradas por cabecera TIFF y repara filas faltantes de un ARW con el JPEG embebido. Usar SIEMPRE que el usuario quiera recuperar fotos o archivos de una memoria o tarjeta SD/CF de cámara, mencione PhotoRec, TestDisk, Recuva, "la tarjeta pide formatear", fotos borradas o rotas de un evento, RAW/ARW/NEF/CR2 que no abren, aunque no pida nada forense. También discos externos NTFS formateados. SD card photo recovery, deleted RAW/JPG, formatted NTFS drive.
 compatibility: Windows con Python 3 y numpy, pillow, rawpy. Leer la tarjeta cruda exige consola como Administrador. Hace falta espacio libre igual al tamaño de la tarjeta para la imagen.
 ---
 
@@ -45,6 +45,10 @@ Preguntar poco y mirar mucho. Lo útil: letra de la tarjeta, cámara y formato (
 El usuario típico es fotógrafo, no programador: escribe en español rioplatense, a veces todo en mayúsculas, y pide "los pasos". Si da permiso, hacer las cosas uno mismo (ver la receta de elevación más abajo). Si tiene que ejecutar algo, un comando por bloque, para PowerShell, diciendo dónde pegarlo y qué debería ver.
 
 ## Flujo
+
+**Antes de elegir: ¿es un disco NTFS formateado** (disco externo que ahora figura vacío)? No sigas esta tabla: leé `references/ntfs-formateado.md` y usá `ntfs_formateado.py` (`diagnostico` → copia de 4 GB → `inventario` → `copiar` → `verificar` → `entrega`). Recupera nombres y carpetas desde el índice anterior, y admite copia directa en solo lectura cuando el disco está sano y no hay lugar para la imagen (avisándolo).
+
+Para tarjetas:
 
 | Fase | Objetivo | Herramienta |
 |---|---|---|
@@ -101,6 +105,7 @@ Avisar al usuario antes de lanzarlo ("te va a aparecer un cartel de Windows, toc
 |---|---|
 | `rescatar_sd.py` | Herramienta general en un archivo, solo biblioteca estándar de Python (con el `.bat` alcanza para el camino rápido): `scan`, `image`, `extract`, `thumbs`. Lee volumen o imagen, FAT32, cadenas, veredicto por foto, `--ref` para cruzar con PhotoRec. Importable (`Fat32`, `Tiff`, `jpeg_scan`, `find_jpegs`). Lo demás necesita numpy, pillow y rawpy. |
 | `exfat_jpg.py` | exFAT, solo lectura sobre la imagen (numpy y pillow). `info`: geometría, bitmap, árbol vivo. `escanear`: una pasada por toda la imagen (35 s para 63 GB) que junta los conjuntos de entradas de directorio vivos, borrados y huérfanos, validados por su suma de verificación, las cabezas JPEG alineadas a cluster y los clusters en cero. `extraer`: por entrada, con nombre, fecha y tamaño originales; sigue la cadena FAT de los fragmentados y marca los pisados por entradas más nuevas. `carvar`: por cabecera, acotado a la próxima cabeza (lo cortado sale `PARCIAL`). `hojas`: contactos. |
+| `ntfs_formateado.py` | Disco NTFS formateado, solo lectura. `diagnostico`, `inventario` (índice anterior desde una copia del principio; marca lo que pisó el sistema nuevo), `copiar` (directo, en orden de disco, por tandas, retomable, con SHA-256), `verificar` (numpy y pillow), `entrega` (reporte, LEEME, huellas y cierre de cuentas). |
 | `mapa_clusters.py` | Tipo de cada cluster (ZERO/RAW/JPEG/TIFF/OTRO), cabeceras con tamaño esperado, saltos de empalme y su **período** (tamaño de la unidad de escritura). |
 | `buscar_metadatos.py` | Entradas de directorio y páginas de FAT sueltas dentro del área de datos (volcados). |
 | `carve_cabeceras.py` | Cabeceras TIFF alineadas a cluster; estado en la FAT; extrae las borradas asumiendo archivo contiguo; `--verificar` con LibRaw. |
@@ -123,6 +128,7 @@ Constantes de la **A7R V** (fila de 9600 bytes, 6376 filas, recorte 32,20) está
 
 - `references/forense.md`: cuando el camino rápido no alcanza. Síntomas, volcados de metadatos, reconstrucción de directorio y FAT, unidades de escritura con pares intercambiados, prueba del largo, fotos en vuelo, huérfanas.
 - `references/arw2-sony.md`: antes de tocar una tira ARW (formato, códec, fase de filas, modelos de síntesis, adaptar a otro modelo, notas de NEF).
+- `references/ntfs-formateado.md`: disco externo NTFS formateado: reglas, espacio, flujo, qué pisa el formateo y límites.
 - `references/entrega.md`: al armar la carpeta final, el reporte y el mensaje al usuario.
 - `references/caso-referencia.md`: para ver cómo se aplicó todo en una tarjeta real, con cifras.
 
