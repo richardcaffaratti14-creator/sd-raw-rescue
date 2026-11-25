@@ -19,6 +19,25 @@ Las herramientas están en `scripts/` (la ruta base la muestra Claude Code al ca
 5. **Trabajo reproducible y con copias.** Scripts que se pueden volver a correr, backup antes de re-sintetizar, logs en archivo. Nada va a git ni se sube a ningún servicio: son fotos de clientes.
 6. **No borrar la imagen ni las carpetas de trabajo sin preguntar** (la imagen ocupa 32 GB, pero es la única copia fiel de la tarjeta hasta que el usuario valide las fotos).
 
+## Dónde va todo (definirlo antes de crear cualquier carpeta)
+
+**Una sola carpeta principal, `sd-raw-rescue`, y adentro una por cada rescate con la fecha del día en que se activó la skill** (`AAAA-MM-DD`, tomada del reloj de la PC, no de la cámara ni de las fotos). Nada de carpetas sueltas en la raíz del disco: así el usuario sabe qué creó la skill y puede guardarlo o borrarlo de una vez.
+
+```
+D:\sd-raw-rescue\
+  2026-01-31\              <- el rescate activado ese día
+    imagen\                tarjeta.img
+    trabajo\               todo lo intermedio, pruebas incluidas
+    logs\
+    herramientas\          scripts a medida de este caso
+    RECUPERADO_FINAL\      la entrega (references/entrega.md)
+  2026-01-31_2\            <- otra tarjeta el mismo día
+```
+
+- Crear la carpeta del día **antes del primer comando que escriba algo**, y decirle al usuario cuál es. Dentro de ella no inventar otras carpetas de primer nivel: lo que no sea imagen, logs, herramientas o entrega va en `trabajo\`.
+- Si la carpeta de hoy ya existe y es de **otra** tarjeta, usar `_2`, `_3`... Nunca mezclar dos tarjetas ni pisar una imagen. Si se **retoma** un rescate de otro día, seguir en su carpeta original.
+- La carpeta principal va en un disco con lugar de sobra (por defecto `D:\`; si no existe, en la carpeta del usuario), **nunca en la tarjeta**. Si ya existe, reusarla.
+
 ## Antes de empezar
 
 Preguntar poco y mirar mucho. Lo útil: letra de la tarjeta, cámara y formato (ARW/NEF/CR2), cuántas fotos se esperan (es el mejor control de que no falta nada), si ya corrieron PhotoRec o TestDisk y dónde quedó su salida (los nombres `fNNNNNNN` de PhotoRec son el **sector** donde empieza cada fragmento: sirven de pista con `--ref`), y si siguieron usando la tarjeta. Chequear Python (`python --version`), el espacio libre y que `numpy`, `pillow` y `rawpy` estén instalados (`pip install numpy pillow rawpy`).
@@ -50,9 +69,12 @@ La consola de Claude Code no es administrador y `\\.\E:` lo exige. Se lanza el s
 ```powershell
 $py  = 'C:\ruta\a\python.exe'            # ruta absoluta; el proceso elevado no hereda el venv
 $sk  = 'C:\ruta\a\la\skill\scripts'
-$log = 'D:\RESCATE\logs\imagen.txt'
-New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
-Start-Process -FilePath $py -Verb RunAs -ArgumentList ('"' + $sk + '\rescatar_sd.py" image E: --out "D:\RESCATE\tarjeta.img" --log "' + $log + '"')
+$run = 'D:\sd-raw-rescue\' + (Get-Date -Format 'yyyy-MM-dd')   # si ya es de otra tarjeta: _2, _3 (ver "Dónde va todo")
+$img = "$run\imagen\tarjeta.img"
+$log = "$run\logs\imagen.txt"
+if (Test-Path $img) { throw "Ya hay una imagen en $run: no se pisa" }
+New-Item -ItemType Directory -Force (Split-Path $img), (Split-Path $log) | Out-Null
+Start-Process -FilePath $py -Verb RunAs -ArgumentList ('"' + $sk + '\rescatar_sd.py" image E: --out "' + $img + '" --log "' + $log + '"')
 ```
 
 Avisar al usuario antes de lanzarlo ("te va a aparecer un cartel de Windows, tocá Sí") y después mirar el log hasta ver `== FIN (codigo 0)`; una tarjeta de 32 GB por USB tarda 10-15 minutos. No hace falta elevar para nada más: todo lo que sigue trabaja sobre la imagen. Si el usuario prefiere hacerlo él, `scripts/RESCATAR_TARJETA.bat` hace lo mismo con un menú, se auto-eleva y tiene las mismas cuatro operaciones (diagnóstico, imagen, extraer, miniaturas).

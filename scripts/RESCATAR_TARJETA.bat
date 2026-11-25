@@ -21,7 +21,7 @@ if not defined PY (
   pause
   exit /b 1
 )
-if not exist "%~dp0logs" mkdir "%~dp0logs"
+set "RUN="
 
 :menu
 cls
@@ -48,29 +48,64 @@ goto menu
 :diag
 set /p L=Letra de la tarjeta (ej. E):
 set "L=%L::=%"
-%PY% "%~dp0rescatar_sd.py" scan %L%: --log "%~dp0logs\diagnostico.txt" --pause
+call :carpeta "%L%"
+%PY% "%~dp0rescatar_sd.py" scan %L%: --log "!RUN!\logs\diagnostico.txt" --pause
 goto menu
 
 :imagen
 set /p L=Letra de la tarjeta (ej. E):
 set "L=%L::=%"
-set /p D=Carpeta de destino (necesita lugar libre igual al tamano de la tarjeta, ej. D:\RESCATE):
-if not exist "%D%" mkdir "%D%"
-%PY% "%~dp0rescatar_sd.py" image %L%: --out "%D%\tarjeta.img" --log "%~dp0logs\imagen.txt" --pause
+call :carpeta "%L%"
+call :sin_pisar
+if not exist "!RUN!\imagen" mkdir "!RUN!\imagen"
+echo La imagen necesita lugar libre igual al tamano de la tarjeta.
+%PY% "%~dp0rescatar_sd.py" image %L%: --out "!RUN!\imagen\tarjeta.img" --log "!RUN!\logs\imagen.txt" --pause
 goto menu
 
 :extraer
-echo Origen: letra de la tarjeta (E) o ruta de una imagen hecha con la opcion 2 (ej. D:\RESCATE\tarjeta.img)
+echo Origen: letra de la tarjeta (E) o ruta de una imagen. Enter = la imagen de este rescate.
+set "L="
 set /p L=Origen:
-set /p D=Carpeta donde dejar las fotos (ej. D:\RESCATE\FOTOS):
-if not exist "%D%" mkdir "%D%"
-set "SRC=%L%"
-if /i "%L:~1,1%"=="" set "SRC=%L%:"
-%PY% "%~dp0rescatar_sd.py" extract "%SRC%" --out "%D%" --log "%~dp0logs\extraccion.txt" --pause
+set "T="
+if defined L if "!L:~2!"=="" set "T=!L:~0,1!"
+call :carpeta "!T!"
+if not defined L set "L=!RUN!\imagen\tarjeta.img"
+set "SRC=!L!"
+if "!L:~1,1!"=="" set "SRC=!L!:"
+%PY% "%~dp0rescatar_sd.py" extract "!SRC!" --out "!RUN!\RECUPERADO_FINAL\FOTOS" --log "!RUN!\logs\extraccion.txt" --pause
 goto menu
 
 :thumbs
-set /p P=Carpeta con los RAW (ej. D:\RESCATE\FOTOS):
-set /p D=Carpeta donde dejar los JPEG (ej. D:\RESCATE\JPEG):
-%PY% "%~dp0rescatar_sd.py" thumbs "%P%" --out "%D%" --log "%~dp0logs\miniaturas.txt" --pause
+echo Carpeta con los RAW. Enter = las fotos extraidas en este rescate.
+set "P="
+set /p P=Carpeta:
+call :carpeta ""
+if not defined P set "P=!RUN!\RECUPERADO_FINAL\FOTOS"
+%PY% "%~dp0rescatar_sd.py" thumbs "!P!" --out "!RUN!\RECUPERADO_FINAL\JPEG" --log "!RUN!\logs\miniaturas.txt" --pause
 goto menu
+
+rem --- una sola carpeta principal (sd-raw-rescue) y adentro una por dia; %1 = letra de la tarjeta.
+rem --- Si ya hay rescates de hoy, sigue en el ultimo. Nunca la crea en la tarjeta.
+:carpeta
+if defined RUN exit /b 0
+set "BASE=%USERPROFILE%\sd-raw-rescue"
+if exist D:\ if /i not "%~1"=="D" set "BASE=D:\sd-raw-rescue"
+if defined SDRAW_BASE set "BASE=%SDRAW_BASE%"
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "HOY=%%i"
+set "RUN=!BASE!\!HOY!"
+for /l %%n in (2,1,99) do if exist "!BASE!\!HOY!_%%n\" set "RUN=!BASE!\!HOY!_%%n"
+if not exist "!RUN!\logs" mkdir "!RUN!\logs"
+echo Carpeta de este rescate: !RUN!
+exit /b 0
+
+rem --- si la carpeta ya tiene una imagen (otra tarjeta u otra pasada), abre la siguiente: _2, _3...
+:sin_pisar
+if not exist "!RUN!\imagen\tarjeta.img" exit /b 0
+set "N=1"
+:sin_pisar_sig
+set /a N+=1
+if exist "!BASE!\!HOY!_!N!\" goto sin_pisar_sig
+set "RUN=!BASE!\!HOY!_!N!"
+mkdir "!RUN!\logs"
+echo Ya habia una imagen. Carpeta nueva: !RUN!
+exit /b 0

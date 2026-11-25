@@ -4,6 +4,8 @@ El usuario va a abrir la carpeta, mirar una hoja de contacto y reenviar fotos a 
 
 ## Estructura
 
+`RECUPERADO_FINAL` va dentro de la carpeta del rescate, `sd-raw-rescue\AAAA-MM-DD\` (ver "Dónde va todo" en `SKILL.md`), nunca suelta en la raíz del disco.
+
 ```
 RECUPERADO_FINAL/
   RAW_<Marca>_<EXT>/          fotos RAW con su nombre (original o deducido, ver reporte)
